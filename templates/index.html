@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Royale - Jeu Multijoueur</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        canvas {
+            border: 3px solid gold;
+            background: #2d5016;
+            display: block;
+            margin-bottom: 20px;
+        }
+        
+        #hud {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 5px;
+            width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            text-align: center;
+        }
+        
+        .hud-section {
+            border: 1px solid gold;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        
+        .hud-title {
+            color: gold;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .hud-content {
+            font-size: 14px;
+        }
+        
+        #health-bar {
+            width: 100%;
+            height: 20px;
+            background: red;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        #health-bar-fill {
+            height: 100%;
+            background: green;
+            transition: width 0.2s;
+        }
+        
+        .controls {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 12px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>⚔️ Battle Royale Multijoueur</h1>
+        <canvas id="gameCanvas" width="1200" height="800"></canvas>
+        
+        <div id="hud">
+            <div class="hud-section">
+                <div class="hud-title">❤️ Santé</div>
+                <div id="health-bar">
+                    <div id="health-bar-fill" style="width: 100%"></div>
+                </div>
+                <div class="hud-content" id="health-text">100/100</div>
+            </div>
+            
+            <div class="hud-section">
+                <div class="hud-title">🔫 Arme</div>
+                <div class="hud-content" id="weapon-text">Fusil d'assaut (34/34)</div>
+            </div>
+            
+            <div class="hud-section">
+                <div class="hud-title">👥 Joueurs</div>
+                <div class="hud-content" id="players-text">Connexion...</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <p><strong>Contrôles:</strong> Z/Q/S/D = Déplacement | Clic = Tirer | 1/2/3 = Arme | R = Recharger | ESC = Quitter</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const socket = io();
+        
+        let gameState = null;
+        let playerId = null;
+        let playerSid = null;
+        const keys = {};
+        
+        // Constants
+        const COLORS = {
+            GRASS: '#2d5016',
+            BUILDING: '#8b4513',
+            PLAYER_ALLY: '#ffff00',
+            PLAYER_ENEMY: '#ff0000',
+            HEALTH_GREEN: '#00ff00',
+            HEALTH_RED: '#ff0000'
+        };
+        
+        // Events
+        socket.on('connect', () => {
+            console.log('Connecté au serveur');
+        });
+        
+        socket.on('player_id', (data) => {
+            playerId = data.id;
+            console.log('Votre ID:', playerId);
+        });
+        
+        socket.on('game_state', (state) => {
+            gameState = state;
+        });
+        
+        socket.on('shot', (data) => {
+            console.log('Tir détecté:', data);
+        });
+        
+        // Keyboard events
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'z' || key === 'q' || key === 's' || key === 'd') {
+                keys[key] = true;
+                e.preventDefault();
+            }
+            if (key === '1') {
+                socket.emit('switch_weapon', {weapon: 0});
+            } else if (key === '2') {
+                socket.emit('switch_weapon', {weapon: 1});
+            } else if (key === '3') {
+                socket.emit('switch_weapon', {weapon: 2});
+            } else if (key === 'r') {
+                socket.emit('reload', {});
+            } else if (key === 'escape') {
+                alert('Jeu fermé');
+                window.location.reload();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'z' || key === 'q' || key === 's' || key === 'd') {
+                keys[key] = false;
+            }
+        });
+        
+        canvas.addEventListener('click', () => {
+            socket.emit('shoot', {});
+        });
+        
+        // Game loop
+        setInterval(() => {
+            socket.emit('movement', keys);
+        }, 1000 / 60);
+        
+        // Render loop
+        function render() {
+            if (!gameState) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Connexion au serveur...', canvas.width / 2, canvas.height / 2);
+                requestAnimationFrame(render);
+                return;
+            }
+            
+            // Clear canvas
+            ctx.fillStyle = COLORS.GRASS;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw buildings
+            gameState.map.forEach(building => {
+                ctx.fillStyle = COLORS.BUILDING;
+                ctx.fillRect(building.x, building.y, building.width, building.height);
+                ctx.strokeStyle = '#cccccc';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(building.x, building.y, building.width, building.height);
+            });
+            
+            // Draw players
+            Object.entries(gameState.players).forEach(([sid, player]) => {
+                if (!player.is_alive) return;
+                
+                const isPlayer = player.id === playerId;
+                ctx.fillStyle = isPlayer ? COLORS.PLAYER_ALLY : COLORS.PLAYER_ENEMY;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Health bar
+                const barWidth = 30;
+                const barHeight = 5;
+                ctx.fillStyle = COLORS.HEALTH_RED;
+                ctx.fillRect(player.x - barWidth / 2, player.y - 25, barWidth, barHeight);
+                
+                const healthPercent = player.health / 100;
+                ctx.fillStyle = COLORS.HEALTH_GREEN;
+                ctx.fillRect(player.x - barWidth / 2, player.y - 25, barWidth * healthPercent, barHeight);
+            });
+            
+            // Update HUD
+            updateHUD();
+            
+            requestAnimationFrame(render);
+        }
+        
+        function updateHUD() {
+            if (!gameState) return;
+            
+            const currentPlayer = Object.values(gameState.players).find(p => p.id === playerId);
+            if (!currentPlayer) return;
+            
+            // Health
+            const healthPercent = (currentPlayer.health / 100) * 100;
+            document.getElementById('health-bar-fill').style.width = healthPercent + '%';
+            document.getElementById('health-text').textContent = `${Math.floor(currentPlayer.health)}/100`;
+            
+            // Weapon
+            const weaponNames = ['Fusil d\'assaut', 'Pistolet', 'Couteau'];
+            const weapon = currentPlayer.weapons[currentPlayer.current_weapon];
+            const ammoText = weapon.type === 'knife' ? '∞' : weapon.ammo;
+            const maxAmmoText = weapon.type === 'knife' ? '∞' : weapon.max_ammo;
+            document.getElementById('weapon-text').textContent = 
+                `${weaponNames[currentPlayer.current_weapon]} (${ammoText}/${maxAmmoText})`;
+            if (weapon.is_reloading) {
+                document.getElementById('weapon-text').style.color = 'red';
+                document.getElementById('weapon-text').textContent += ' - RECHARGE...';
+            } else {
+                document.getElementById('weapon-text').style.color = 'white';
+            }
+            
+            // Players alive
+            const aliveCount = Object.values(gameState.players).filter(p => p.is_alive).length;
+            document.getElementById('players-text').textContent = `${aliveCount}/10 vivants`;
+        }
+        
+        // Start render loop
+        render();
+    </script>
+</body>
+</html>
