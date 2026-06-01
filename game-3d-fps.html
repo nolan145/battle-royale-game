@@ -150,7 +150,7 @@
         <div id="health-bar">
             <div id="health-bar-fill" style="width: 100%"></div>
         </div>
-        <div class="hud-content" id="health-text">100/100 HP</div>
+        <div class="hud-content" id="health-text">200/200 HP</div>
         
         <div class="hud-title">🔫 ARME</div>
         <div class="hud-content" id="weapon-text">Fusil d'assaut</div>
@@ -187,29 +187,33 @@
         renderer.shadowMap.type = THREE.PCFShadowShadowMap;
         
         scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 500, 1000);
+        scene.fog = new THREE.Fog(0x87CEEB, 800, 1200);
         
         // ===== CONSTANTES =====
-        const WORLD_SIZE = 500;
-        const MAX_HEALTH = 100;
+        const WORLD_SIZE = 800;
+        const MAX_HEALTH = 200;
         const RESPAWN_TIME = 30;
-        const PLAYER_SPEED = 0.15;
-        const JUMP_FORCE = 0.3;
+        const PLAYER_SPEED = 0.08;
+        const JUMP_FORCE = 0.25;
         
         // ===== ÉCLAIRAGE =====
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(100, 100, 100);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        directionalLight.position.set(150, 150, 150);
         directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.mapSize.width = 4096;
+        directionalLight.shadow.mapSize.height = 4096;
+        directionalLight.shadow.camera.left = -400;
+        directionalLight.shadow.camera.right = 400;
+        directionalLight.shadow.camera.top = 400;
+        directionalLight.shadow.camera.bottom = -400;
         scene.add(directionalLight);
         
         // ===== SOL =====
         const groundGeometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE);
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x3d7028 });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
@@ -227,7 +231,7 @@
                 this.isReloading = false;
                 this.reloadTimer = 0;
                 this.lastShotTime = 0;
-                this.shotCooldown = name === 'assault_rifle' ? 0.1 : name === 'pistol' ? 0.15 : 0.3;
+                this.shotCooldown = name === 'assault_rifle' ? 0.15 : name === 'pistol' ? 0.2 : 0.4;
             }
             
             shoot() {
@@ -257,6 +261,75 @@
             }
         }
         
+        // ===== FONCTION POUR CRÉER UN JOUEUR VISIBLE =====
+        function createPlayerMesh(isLocalPlayer) {
+            const group = new THREE.Group();
+            
+            // Corps (cubique plus grand)
+            const bodyGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.8);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ 
+                color: isLocalPlayer ? 0xFFFF00 : 0xFF4444,
+                metalness: 0.4,
+                roughness: 0.6
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.6;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+            
+            // Tête (carrée)
+            const headGeometry = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+            const headMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xFFCC99,
+                metalness: 0.3,
+                roughness: 0.7
+            });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 1.55;
+            head.castShadow = true;
+            head.receiveShadow = true;
+            group.add(head);
+            
+            // Yeux gauche
+            const eyeGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+            const eyeMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x000000,
+                metalness: 0.8,
+                roughness: 0.2
+            });
+            const eyeLeft = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            eyeLeft.position.set(-0.15, 1.7, 0.35);
+            eyeLeft.castShadow = true;
+            group.add(eyeLeft);
+            
+            // Yeux droit
+            const eyeRight = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            eyeRight.position.set(0.15, 1.7, 0.35);
+            eyeRight.castShadow = true;
+            group.add(eyeRight);
+            
+            // Bras gauche
+            const armGeometry = new THREE.BoxGeometry(0.25, 1, 0.25);
+            const armMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xFFCC99,
+                metalness: 0.3,
+                roughness: 0.7
+            });
+            const armLeft = new THREE.Mesh(armGeometry, armMaterial);
+            armLeft.position.set(-0.5, 0.8, 0);
+            armLeft.castShadow = true;
+            group.add(armLeft);
+            
+            // Bras droit
+            const armRight = new THREE.Mesh(armGeometry, armMaterial);
+            armRight.position.set(0.5, 0.8, 0);
+            armRight.castShadow = true;
+            group.add(armRight);
+            
+            return group;
+        }
+        
         // ===== CLASSE JOUEUR =====
         class Player {
             constructor(x, y, z, isLocalPlayer = false) {
@@ -268,24 +341,15 @@
                 this.velocity = new THREE.Vector3(0, 0, 0);
                 this.isJumping = false;
                 
-                // Créer le corps cubique
-                const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8);
-                const material = new THREE.MeshStandardMaterial({ 
-                    color: isLocalPlayer ? 0xFFFF00 : 0xFF0000,
-                    metalness: 0.5,
-                    roughness: 0.5
-                });
-                this.mesh = new THREE.Mesh(geometry, material);
+                this.mesh = createPlayerMesh(isLocalPlayer);
                 this.mesh.position.copy(this.position);
-                this.mesh.castShadow = true;
-                this.mesh.receiveShadow = true;
                 scene.add(this.mesh);
                 
-                // Armes
+                // Armes (dégâts réduits)
                 this.weapons = [
-                    new Weapon('assault_rifle', 34, 34, 1.5, 20, 150),
-                    new Weapon('pistol', 6, 6, 1.0, 30, 100),
-                    new Weapon('knife', Infinity, Infinity, 0, 50, 5)
+                    new Weapon('assault_rifle', 34, 34, 1.5, 8, 150),
+                    new Weapon('pistol', 6, 6, 1.0, 12, 100),
+                    new Weapon('knife', Infinity, Infinity, 0, 20, 5)
                 ];
                 this.currentWeaponIdx = 0;
                 
@@ -316,12 +380,12 @@
                 
                 // Régénération
                 if (this.health < MAX_HEALTH) {
-                    this.health += 0.1 * dt;
+                    this.health += 0.08 * dt;
                     this.health = Math.min(this.health, MAX_HEALTH);
                 }
                 
                 // Gravité
-                this.velocity.y -= 0.01;
+                this.velocity.y -= 0.008;
                 this.position.add(this.velocity);
                 
                 // Sol
@@ -379,22 +443,22 @@
                     this.velocity.z = direction.z * PLAYER_SPEED;
                     
                     const weapon = this.getCurrentWeapon();
-                    if (nearestDist < weapon.range && Math.random() < 0.1) {
+                    if (nearestDist < weapon.range && Math.random() < 0.05) {
                         this.shootAtPlayer(nearest);
                     }
                     
                     // Changer d'arme
                     if (this.aiTimer <= 0) {
-                        if (Math.random() < 0.3) {
+                        if (Math.random() < 0.2) {
                             this.currentWeaponIdx = Math.floor(Math.random() * 3);
                         }
-                        this.aiTimer = Math.random() * 2 + 1;
+                        this.aiTimer = Math.random() * 3 + 2;
                     }
                 } else {
                     if (this.aiTimer <= 0) {
-                        this.velocity.x = (Math.random() - 0.5) * PLAYER_SPEED * 2;
-                        this.velocity.z = (Math.random() - 0.5) * PLAYER_SPEED * 2;
-                        this.aiTimer = Math.random() * 3 + 1;
+                        this.velocity.x = (Math.random() - 0.5) * PLAYER_SPEED * 1.5;
+                        this.velocity.z = (Math.random() - 0.5) * PLAYER_SPEED * 1.5;
+                        this.aiTimer = Math.random() * 4 + 2;
                     }
                 }
             }
@@ -403,7 +467,7 @@
                 const weapon = this.getCurrentWeapon();
                 if (weapon.shoot()) {
                     const dist = this.position.distanceTo(target.position);
-                    const hitChance = 1.0 - (dist / weapon.range) * 0.5;
+                    const hitChance = Math.max(0.1, 1.0 - (dist / weapon.range) * 0.7);
                     
                     if (Math.random() < hitChance) {
                         target.takeDamage(weapon.damage);
@@ -423,13 +487,29 @@
             die() {
                 this.isAlive = false;
                 this.respawnTimer = RESPAWN_TIME;
-                this.mesh.material.color.setHex(0x808080);
+                for (let child of this.mesh.children) {
+                    if (child.material) {
+                        child.material.color.setHex(0x808080);
+                    }
+                }
             }
             
             respawn() {
                 this.isAlive = true;
                 this.health = MAX_HEALTH;
-                this.mesh.material.color.setHex(this.isLocalPlayer ? 0xFFFF00 : 0xFF0000);
+                
+                const isLocalPlayer = this.isLocalPlayer;
+                for (let child of this.mesh.children) {
+                    if (child.material) {
+                        if (child === this.mesh.children[0]) {
+                            child.material.color.setHex(isLocalPlayer ? 0xFFFF00 : 0xFF4444);
+                        } else if (child === this.mesh.children[1]) {
+                            child.material.color.setHex(0xFFCC99);
+                        } else {
+                            child.material.color.setHex(0xFFCC99);
+                        }
+                    }
+                }
                 
                 let validPosition = false;
                 while (!validPosition) {
@@ -440,7 +520,7 @@
                     validPosition = true;
                     for (let building of buildings) {
                         const dist = this.position.distanceTo(building.position);
-                        if (dist < 30) {
+                        if (dist < 50) {
                             validPosition = false;
                             break;
                         }
@@ -462,10 +542,15 @@
                         const raycaster = new THREE.Raycaster();
                         raycaster.setFromCamera({ x: 0, y: 0 }, camera);
                         
-                        const intersects = raycaster.intersectObjects(raycastObjects);
+                        const intersects = raycaster.intersectObjects(raycastObjects, true);
                         for (let intersection of intersects) {
-                            if (intersection.object.isPlayer && intersection.object.player !== this) {
-                                intersection.object.player.takeDamage(weapon.damage);
+                            let playerMesh = intersection.object;
+                            while (playerMesh && !playerMesh.isPlayer) {
+                                playerMesh = playerMesh.parent;
+                            }
+                            
+                            if (playerMesh && playerMesh.isPlayer && playerMesh.player !== this) {
+                                playerMesh.player.takeDamage(weapon.damage);
                                 break;
                             }
                         }
@@ -508,14 +593,32 @@
             const geometry = new THREE.BoxGeometry(width, height, depth);
             const material = new THREE.MeshStandardMaterial({ 
                 color: color,
-                metalness: 0.3,
-                roughness: 0.7
+                metalness: 0.2,
+                roughness: 0.8
             });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(x, height / 2, z);
             mesh.castShadow = true;
             mesh.receiveShadow = true;
             scene.add(mesh);
+            
+            // Ajouter fenêtres
+            const windowGeometry = new THREE.BoxGeometry(3, 3, 0.2);
+            const windowMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x4488FF,
+                metalness: 0.9,
+                roughness: 0.1
+            });
+            
+            const windowLeft = new THREE.Mesh(windowGeometry, windowMaterial);
+            windowLeft.position.set(x - width/3, height/2, z + depth/2 + 0.1);
+            windowLeft.castShadow = true;
+            scene.add(windowLeft);
+            
+            const windowRight = new THREE.Mesh(windowGeometry, windowMaterial);
+            windowRight.position.set(x + width/3, height/2, z + depth/2 + 0.1);
+            windowRight.castShadow = true;
+            scene.add(windowRight);
             
             buildings.push({
                 mesh: mesh,
@@ -526,23 +629,24 @@
             });
         }
         
-        // Créer un village
-        const colors = [0x8B4513, 0xA0522D, 0x654321, 0x704214];
+        // Créer un village avec des maisons plus grandes
+        const colors = [0xB8860B, 0xCD853F, 0x8B4513, 0xA0522D];
         
-        // Maisons rangées
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-                const x = (i - 1.5) * 80;
-                const z = (j - 1.5) * 80;
+        // Maisons rangées (plus grandes)
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                const x = (i - 1) * 150;
+                const z = (j - 1) * 150;
                 const color = colors[Math.floor(Math.random() * colors.length)];
-                createBuilding(x, z, 30, 30, 25, color);
+                createBuilding(x, z, 50, 50, 40, color);
             }
         }
         
-        // Quelques plus grands bâtiments
-        createBuilding(-150, 150, 50, 50, 40, 0x654321);
-        createBuilding(150, -150, 50, 50, 40, 0x704214);
-        createBuilding(100, 100, 40, 40, 35, 0x8B4513);
+        // Grands bâtiments
+        createBuilding(-200, 200, 80, 60, 50, 0x654321);
+        createBuilding(200, -200, 80, 60, 50, 0x704214);
+        createBuilding(150, 150, 70, 70, 45, 0x8B4513);
+        createBuilding(-150, -150, 70, 70, 45, 0xA0522D);
         
         // ===== JOUEURS =====
         const players = [];
@@ -557,13 +661,13 @@
             let x, z;
             
             while (!valid) {
-                x = (Math.random() - 0.5) * WORLD_SIZE * 0.8;
-                z = (Math.random() - 0.5) * WORLD_SIZE * 0.8;
+                x = (Math.random() - 0.5) * WORLD_SIZE * 0.7;
+                z = (Math.random() - 0.5) * WORLD_SIZE * 0.7;
                 
                 valid = true;
                 for (let building of buildings) {
                     const dist = Math.sqrt((x - building.position.x) ** 2 + (z - building.position.z) ** 2);
-                    if (dist < 30) {
+                    if (dist < 60) {
                         valid = false;
                         break;
                     }
@@ -617,7 +721,7 @@
         
         canvas.addEventListener('click', () => {
             if (localPlayer.isAlive) {
-                localPlayer.shoot(players.map(p => p.mesh));
+                localPlayer.shoot([localPlayer.mesh, ...players.filter(p => p !== localPlayer).map(p => p.mesh)]);
             }
         });
         
@@ -660,7 +764,7 @@
                 const healthPercent = (localPlayer.health / MAX_HEALTH) * 100;
                 document.getElementById('health-bar-fill').style.width = healthPercent + '%';
                 document.getElementById('health-text').textContent = 
-                    `${Math.floor(localPlayer.health)}/100 HP`;
+                    `${Math.floor(localPlayer.health)}/200 HP`;
                 
                 const weaponNames = ['Fusil d\'assaut', 'Pistolet', 'Couteau'];
                 const weapon = localPlayer.getCurrentWeapon();
