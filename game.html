@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Royale - 10 Joueurs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        h1 {
+            color: gold;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px gold;
+        }
+        
+        canvas {
+            border: 4px solid gold;
+            background: #2d5016;
+            display: block;
+            margin-bottom: 20px;
+            cursor: crosshair;
+        }
+        
+        #hud {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border: 2px solid gold;
+            border-radius: 5px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        
+        .hud-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .hud-section {
+            background: rgba(139, 69, 19, 0.3);
+            border: 1px solid gold;
+            padding: 15px;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        .hud-title {
+            color: gold;
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .hud-content {
+            font-size: 16px;
+            color: #fff;
+        }
+        
+        #health-bar {
+            width: 100%;
+            height: 20px;
+            background: red;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        #health-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff0000, #00ff00);
+            transition: width 0.2s;
+        }
+        
+        .controls {
+            background: rgba(0, 0, 0, 0.8);
+            border-top: 2px solid gold;
+            padding: 15px;
+            text-align: center;
+            font-size: 13px;
+            color: #aaa;
+            width: 100%;
+            max-width: 1200px;
+            border-radius: 0 0 5px 5px;
+        }
+        
+        .controls p {
+            margin: 5px 0;
+        }
+        
+        .status {
+            color: #0f0;
+            font-weight: bold;
+        }
+        
+        .warning {
+            color: #ff0;
+        }
+        
+        .dead {
+            color: #f00;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>⚔️ BATTLE ROYALE - 10 JOUEURS</h1>
+        <canvas id="gameCanvas" width="1200" height="800"></canvas>
+        
+        <div id="hud">
+            <div class="hud-grid">
+                <div class="hud-section">
+                    <div class="hud-title">❤️ SANTÉ</div>
+                    <div id="health-bar">
+                        <div id="health-bar-fill" style="width: 100%"></div>
+                    </div>
+                    <div class="hud-content" id="health-text">100/100</div>
+                </div>
+                
+                <div class="hud-section">
+                    <div class="hud-title">🔫 ARME</div>
+                    <div class="hud-content" id="weapon-text">Fusil d'assaut</div>
+                    <div class="hud-content" id="ammo-text">34/34</div>
+                </div>
+                
+                <div class="hud-section">
+                    <div class="hud-title">👥 JOUEURS</div>
+                    <div class="hud-content" id="players-text">10/10 vivants</div>
+                </div>
+                
+                <div class="hud-section">
+                    <div class="hud-title">⏱️ RESPAWN</div>
+                    <div class="hud-content" id="respawn-text">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <p><strong>🎮 CONTRÔLES:</strong></p>
+            <p>🔵 <strong>Z/Q/S/D</strong> = Déplacement | <strong>CLIC</strong> = Tirer | <strong>1/2/3</strong> = Arme | <strong>R</strong> = Recharger</p>
+            <p>🟡 <strong>ESC</strong> = Quitter | <strong>JAUNE</strong> = Vous | <strong>ROUGE</strong> = Bots</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // ===== CONSTANTES =====
+        const SCREEN_WIDTH = 1200;
+        const SCREEN_HEIGHT = 800;
+        const PLAYER_SIZE = 15;
+        const PLAYER_SPEED = 4;
+        const MAX_HEALTH = 100;
+        const HEALTH_REGEN_RATE = 0.3;
+        const RESPAWN_TIME = 30;
+        
+        // ===== COULEURS =====
+        const COLORS = {
+            GRASS: '#2d5016',
+            BUILDING: '#8b4513',
+            PLAYER_ALLY: '#ffff00',
+            PLAYER_ENEMY: '#ff0000',
+            HEALTH_GREEN: '#00ff00',
+            HEALTH_RED: '#ff0000',
+            WHITE: '#ffffff'
+        };
+        
+        // ===== CLASSE ARME =====
+        class Weapon {
+            constructor(type, ammo, maxAmmo, reloadTime, damage, range) {
+                this.type = type;
+                this.ammo = ammo;
+                this.maxAmmo = maxAmmo;
+                this.reloadTime = reloadTime;
+                this.isReloading = false;
+                this.reloadTimer = 0;
+                this.damage = damage;
+                this.range = range;
+            }
+            
+            shoot() {
+                if (this.ammo > 0 && !this.isReloading) {
+                    this.ammo--;
+                    return true;
+                } else if (this.ammo === 0 && !this.isReloading) {
+                    this.isReloading = true;
+                    this.reloadTimer = this.reloadTime;
+                }
+                return false;
+            }
+            
+            reload() {
+                if (!this.isReloading && this.ammo < this.maxAmmo) {
+                    this.isReloading = true;
+                    this.reloadTimer = this.reloadTime;
+                }
+            }
+            
+            update(dt) {
+                if (this.isReloading) {
+                    this.reloadTimer -= dt;
+                    if (this.reloadTimer <= 0) {
+                        this.isReloading = false;
+                        this.ammo = this.maxAmmo;
+                    }
+                }
+            }
+        }
+        
+        // ===== CLASSE JOUEUR =====
+        class Player {
+            constructor(x, y, isPlayer = false) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.health = MAX_HEALTH;
+                this.maxHealth = MAX_HEALTH;
+                this.isPlayer = isPlayer;
+                this.isAlive = true;
+                this.respawnTimer = 0;
+                this.lastShotTime = 0;
+                this.shotCooldown = 0.1;
+                
+                this.weapons = [
+                    new Weapon('assault_rifle', 34, 34, 1.5, 15, 300),
+                    new Weapon('pistol', 6, 6, 1.0, 20, 200),
+                    new Weapon('knife', Infinity, Infinity, 0, 25, 40)
+                ];
+                this.currentWeaponIdx = 0;
+                
+                this.targetPlayer = null;
+                this.lastDirection = [1, 0];
+                this.aiActionTimer = 0;
+            }
+            
+            getCurrentWeapon() {
+                return this.weapons[this.currentWeaponIdx];
+            }
+            
+            switchWeapon(idx) {
+                this.currentWeaponIdx = Math.max(0, Math.min(2, idx));
+            }
+            
+            update(dt, players, buildings) {
+                if (!this.isAlive) {
+                    this.respawnTimer -= dt;
+                    if (this.respawnTimer <= 0) {
+                        this.respawn(buildings);
+                    }
+                    return;
+                }
+                
+                this.getCurrentWeapon().update(dt);
+                
+                if (this.health < this.maxHealth) {
+                    this.health += HEALTH_REGEN_RATE * dt;
+                    this.health = Math.min(this.health, this.maxHealth);
+                }
+                
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                this.x = Math.max(PLAYER_SIZE, Math.min(SCREEN_WIDTH - PLAYER_SIZE, this.x));
+                this.y = Math.max(PLAYER_SIZE, Math.min(SCREEN_HEIGHT - PLAYER_SIZE, this.y));
+                
+                for (let building of buildings) {
+                    if (this.collidesWithBuilding(building)) {
+                        this.x -= this.vx;
+                        this.y -= this.vy;
+                    }
+                }
+                
+                if (!this.isPlayer) {
+                    this.updateAI(dt, players);
+                }
+            }
+            
+            collidesWithBuilding(building) {
+                return (this.x - PLAYER_SIZE < building.x + building.width &&
+                        this.x + PLAYER_SIZE > building.x &&
+                        this.y - PLAYER_SIZE < building.y + building.height &&
+                        this.y + PLAYER_SIZE > building.y);
+            }
+            
+            distanceTo(other) {
+                const dx = this.x - other.x;
+                const dy = this.y - other.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            updateAI(dt, players) {
+                this.aiActionTimer -= dt;
+                
+                let nearestEnemy = null;
+                let nearestDistance = Infinity;
+                
+                for (let player of players) {
+                    if (player !== this && player.isAlive) {
+                        const dist = this.distanceTo(player);
+                        if (dist < nearestDistance) {
+                            nearestDistance = dist;
+                            nearestEnemy = player;
+                        }
+                    }
+                }
+                
+                if (nearestEnemy) {
+                    const dx = nearestEnemy.x - this.x;
+                    const dy = nearestEnemy.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > 0) {
+                        this.vx = (dx / dist) * PLAYER_SPEED;
+                        this.vy = (dy / dist) * PLAYER_SPEED;
+                        this.lastDirection = [this.vx, this.vy];
+                    }
+                    
+                    const weapon = this.getCurrentWeapon();
+                    if (nearestDistance < weapon.range) {
+                        if (weapon.shoot()) {
+                            nearestEnemy.takeDamage(weapon.damage);
+                        }
+                    }
+                    
+                    if (this.aiActionTimer <= 0) {
+                        if (Math.random() < 0.3) {
+                            this.currentWeaponIdx = Math.floor(Math.random() * 3);
+                        }
+                        this.aiActionTimer = Math.random() * 2 + 1;
+                    }
+                } else {
+                    if (this.aiActionTimer <= 0) {
+                        this.vx = (Math.random() - 0.5) * PLAYER_SPEED * 2;
+                        this.vy = (Math.random() - 0.5) * PLAYER_SPEED * 2;
+                        this.aiActionTimer = Math.random() * 2 + 1;
+                    }
+                }
+            }
+            
+            shoot() {
+                const now = Date.now() / 1000;
+                if (now - this.lastShotTime > this.shotCooldown) {
+                    const weapon = this.getCurrentWeapon();
+                    if (weapon.shoot()) {
+                        this.lastShotTime = now;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            takeDamage(damage) {
+                if (this.isAlive) {
+                    this.health -= damage;
+                    if (this.health <= 0) {
+                        this.die();
+                    }
+                }
+            }
+            
+            die() {
+                this.isAlive = false;
+                this.respawnTimer = RESPAWN_TIME;
+            }
+            
+            respawn(buildings) {
+                this.health = this.maxHealth;
+                this.isAlive = true;
+                
+                let valid = false;
+                while (!valid) {
+                    this.x = Math.random() * (SCREEN_WIDTH - 100) + 50;
+                    this.y = Math.random() * (SCREEN_HEIGHT - 100) + 50;
+                    
+                    valid = true;
+                    for (let building of buildings) {
+                        if (this.collidesWithBuilding(building)) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+                
+                this.vx = 0;
+                this.vy = 0;
+                for (let weapon of this.weapons) {
+                    weapon.ammo = weapon.maxAmmo;
+                    weapon.isReloading = false;
+                }
+            }
+            
+            draw(ctx) {
+                if (!this.isAlive) return;
+                
+                const color = this.isPlayer ? COLORS.PLAYER_ALLY : COLORS.PLAYER_ENEMY;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, PLAYER_SIZE, 0, Math.PI * 2);
+                ctx.fill();
+                
+                const barWidth = 30;
+                const barHeight = 5;
+                ctx.fillStyle = COLORS.HEALTH_RED;
+                ctx.fillRect(this.x - barWidth / 2, this.y - PLAYER_SIZE - 15, barWidth, barHeight);
+                
+                const healthPercent = this.health / this.maxHealth;
+                ctx.fillStyle = COLORS.HEALTH_GREEN;
+                ctx.fillRect(this.x - barWidth / 2, this.y - PLAYER_SIZE - 15, barWidth * healthPercent, barHeight);
+            }
+        }
+        
+        // ===== CLASSE CARTE =====
+        class GameMap {
+            constructor() {
+                this.buildings = this.generateCity();
+            }
+            
+            generateCity() {
+                const buildings = [];
+                const buildingSize = 80;
+                const spacing = 20;
+                
+                for (let row = 0; row < 3; row++) {
+                    for (let col = 0; col < 4; col++) {
+                        const x = 100 + col * (buildingSize + spacing);
+                        const y = 100 + row * (buildingSize + spacing);
+                        
+                        if (x + buildingSize < SCREEN_WIDTH && y + buildingSize < SCREEN_HEIGHT) {
+                            buildings.push({
+                                x: x,
+                                y: y,
+                                width: buildingSize,
+                                height: buildingSize
+                            });
+                        }
+                    }
+                }
+                
+                return buildings;
+            }
+            
+            draw(ctx) {
+                ctx.fillStyle = COLORS.GRASS;
+                ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+                
+                for (let building of this.buildings) {
+                    ctx.fillStyle = COLORS.BUILDING;
+                    ctx.fillRect(building.x, building.y, building.width, building.height);
+                    ctx.strokeStyle = COLORS.WHITE;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(building.x, building.y, building.width, building.height);
+                }
+            }
+        }
+        
+        // ===== CLASSE JEU =====
+        class Game {
+            constructor() {
+                this.gameMap = new GameMap();
+                this.players = this.initializePlayers();
+                this.player = this.players[0];
+                this.keys = {};
+                this.running = true;
+                this.lastTime = Date.now();
+                
+                this.setupEventListeners();
+                this.gameLoop();
+            }
+            
+            initializePlayers() {
+                const players = [];
+                const player = new Player(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, true);
+                players.push(player);
+                
+                for (let i = 0; i < 9; i++) {
+                    let valid = false;
+                    let x, y;
+                    while (!valid) {
+                        x = Math.random() * (SCREEN_WIDTH - 100) + 50;
+                        y = Math.random() * (SCREEN_HEIGHT - 100) + 50;
+                        
+                        valid = true;
+                        for (let building of this.gameMap.buildings) {
+                            if (x - PLAYER_SIZE < building.x + building.width &&
+                                x + PLAYER_SIZE > building.x &&
+                                y - PLAYER_SIZE < building.y + building.height &&
+                                y + PLAYER_SIZE > building.y) {
+                                valid = false;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    const bot = new Player(x, y, false);
+                    players.push(bot);
+                }
+                
+                return players;
+            }
+            
+            setupEventListeners() {
+                document.addEventListener('keydown', (e) => {
+                    const key = e.key.toLowerCase();
+                    if (['z', 'q', 's', 'd'].includes(key)) {
+                        this.keys[key] = true;
+                        e.preventDefault();
+                    }
+                    
+                    if (key === '1') this.player.switchWeapon(0);
+                    else if (key === '2') this.player.switchWeapon(1);
+                    else if (key === '3') this.player.switchWeapon(2);
+                    else if (key === 'r') this.player.getCurrentWeapon().reload();
+                    else if (key === 'escape') location.reload();
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    const key = e.key.toLowerCase();
+                    if (['z', 'q', 's', 'd'].includes(key)) {
+                        this.keys[key] = false;
+                    }
+                });
+                
+                canvas.addEventListener('click', () => {
+                    if (this.player.isAlive) {
+                        this.player.shoot();
+                    }
+                });
+            }
+            
+            update(dt) {
+                this.player.vx = 0;
+                this.player.vy = 0;
+                
+                if (this.keys['z']) this.player.vy = -PLAYER_SPEED;
+                if (this.keys['s']) this.player.vy = PLAYER_SPEED;
+                if (this.keys['q']) this.player.vx = -PLAYER_SPEED;
+                if (this.keys['d']) this.player.vx = PLAYER_SPEED;
+                
+                if (this.player.vx !== 0 || this.player.vy !== 0) {
+                    this.player.lastDirection = [this.player.vx, this.player.vy];
+                }
+                
+                for (let player of this.players) {
+                    player.update(dt, this.players, this.gameMap.buildings);
+                }
+            }
+            
+            draw() {
+                this.gameMap.draw(ctx);
+                
+                for (let player of this.players) {
+                    player.draw(ctx);
+                }
+                
+                this.updateHUD();
+            }
+            
+            updateHUD() {
+                const healthPercent = (this.player.health / this.player.maxHealth) * 100;
+                document.getElementById('health-bar-fill').style.width = healthPercent + '%';
+                document.getElementById('health-text').textContent = 
+                    `${Math.floor(this.player.health)}/100`;
+                
+                const weaponNames = ['Fusil d\'assaut', 'Pistolet', 'Couteau'];
+                const weapon = this.player.getCurrentWeapon();
+                const ammoDisplay = weapon.type === 'knife' ? '∞' : weapon.ammo;
+                const maxAmmoDisplay = weapon.type === 'knife' ? '∞' : weapon.maxAmmo;
+                
+                document.getElementById('weapon-text').textContent = weaponNames[this.player.currentWeaponIdx];
+                if (weapon.isReloading) {
+                    document.getElementById('ammo-text').innerHTML = 
+                        '<span class="warning">RECHARGE...</span>';
+                } else {
+                    document.getElementById('ammo-text').textContent = `${ammoDisplay}/${maxAmmoDisplay}`;
+                }
+                
+                const aliveCount = this.players.filter(p => p.isAlive).length;
+                document.getElementById('players-text').textContent = `${aliveCount}/10 vivants`;
+                
+                if (!this.player.isAlive) {
+                    const respawnIn = Math.max(0, this.player.respawnTimer).toFixed(1);
+                    document.getElementById('respawn-text').innerHTML = 
+                        `<span class="dead">Respawn: ${respawnIn}s</span>`;
+                } else {
+                    document.getElementById('respawn-text').textContent = '-';
+                }
+            }
+            
+            gameLoop = () => {
+                const now = Date.now();
+                const dt = (now - this.lastTime) / 1000;
+                this.lastTime = now;
+                
+                this.update(dt);
+                this.draw();
+                
+                requestAnimationFrame(this.gameLoop);
+            }
+        }
+        
+        // ===== LANCER LE JEU =====
+        const game = new Game();
+    </script>
+</body>
+</html>
