@@ -88,16 +88,8 @@
             transition: width 0.2s;
         }
         
-        .status {
-            color: #0f0;
-        }
-        
         .warning {
             color: #ff0;
-        }
-        
-        .dead {
-            color: #f00;
         }
         
         #controls {
@@ -193,8 +185,9 @@
         const WORLD_SIZE = 800;
         const MAX_HEALTH = 200;
         const RESPAWN_TIME = 30;
-        const PLAYER_SPEED = 0.08;
+        const PLAYER_SPEED = 0.03;
         const JUMP_FORCE = 0.25;
+        const FRICTION = 0.85;
         
         // ===== ÉCLAIRAGE =====
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -330,6 +323,43 @@
             return group;
         }
         
+        // ===== CRÉER LE PISTOLET DANS LA MAIN =====
+        let gunMesh;
+        function createGunInHand() {
+            const gunGroup = new THREE.Group();
+            
+            // Crosse
+            const stockGeometry = new THREE.BoxGeometry(0.2, 0.3, 0.8);
+            const metalMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x333333,
+                metalness: 0.9,
+                roughness: 0.3
+            });
+            const stock = new THREE.Mesh(stockGeometry, metalMaterial);
+            stock.position.z = 0.2;
+            gunGroup.add(stock);
+            
+            // Canon
+            const barrelGeometry = new THREE.CylinderGeometry(0.08, 0.08, 1.2, 16);
+            const barrel = new THREE.Mesh(barrelGeometry, metalMaterial);
+            barrel.rotation.z = Math.PI / 2;
+            barrel.position.set(0, -0.1, 0.6);
+            gunGroup.add(barrel);
+            
+            // Poignée
+            const gripGeometry = new THREE.BoxGeometry(0.15, 0.4, 0.2);
+            const grip = new THREE.Mesh(gripGeometry, metalMaterial);
+            grip.position.set(0, -0.15, -0.1);
+            gunGroup.add(grip);
+            
+            // Positioner à droite de la caméra
+            gunGroup.position.set(0.4, -0.3, -0.8);
+            gunGroup.scale.set(0.8, 0.8, 0.8);
+            
+            camera.add(gunGroup);
+            gunMesh = gunGroup;
+        }
+        
         // ===== CLASSE JOUEUR =====
         class Player {
             constructor(x, y, z, isLocalPlayer = false) {
@@ -363,6 +393,7 @@
                 this.targetPlayer = null;
                 this.aiTimer = 0;
                 this.direction = new THREE.Vector3(1, 0, 0);
+                this.bodyRotation = 0;
             }
             
             getCurrentWeapon() {
@@ -383,6 +414,10 @@
                     this.health += 0.08 * dt;
                     this.health = Math.min(this.health, MAX_HEALTH);
                 }
+                
+                // Appliquer friction
+                this.velocity.x *= FRICTION;
+                this.velocity.z *= FRICTION;
                 
                 // Gravité
                 this.velocity.y -= 0.008;
@@ -407,6 +442,15 @@
                 if (this.isLocalPlayer) {
                     camera.position.copy(this.position);
                     camera.position.y += 1.4;
+                }
+                
+                // Le corps ne suit pas la caméra pour les joueurs
+                if (!this.isLocalPlayer) {
+                    // Les bots regardent vers la direction de mouvement
+                    if (this.velocity.x !== 0 || this.velocity.z !== 0) {
+                        this.bodyRotation = Math.atan2(this.velocity.x, this.velocity.z);
+                        this.mesh.rotation.y = this.bodyRotation;
+                    }
                 }
                 
                 // Mise à jour arme
@@ -439,8 +483,8 @@
                     const direction = new THREE.Vector3();
                     direction.subVectors(nearest.position, this.position).normalize();
                     
-                    this.velocity.x = direction.x * PLAYER_SPEED;
-                    this.velocity.z = direction.z * PLAYER_SPEED;
+                    this.velocity.x += direction.x * PLAYER_SPEED;
+                    this.velocity.z += direction.z * PLAYER_SPEED;
                     
                     const weapon = this.getCurrentWeapon();
                     if (nearestDist < weapon.range && Math.random() < 0.05) {
@@ -456,8 +500,8 @@
                     }
                 } else {
                     if (this.aiTimer <= 0) {
-                        this.velocity.x = (Math.random() - 0.5) * PLAYER_SPEED * 1.5;
-                        this.velocity.z = (Math.random() - 0.5) * PLAYER_SPEED * 1.5;
+                        this.velocity.x += (Math.random() - 0.5) * PLAYER_SPEED;
+                        this.velocity.z += (Math.random() - 0.5) * PLAYER_SPEED;
                         this.aiTimer = Math.random() * 4 + 2;
                     }
                 }
@@ -513,14 +557,14 @@
                 
                 let validPosition = false;
                 while (!validPosition) {
-                    this.position.x = (Math.random() - 0.5) * WORLD_SIZE * 0.8;
-                    this.position.z = (Math.random() - 0.5) * WORLD_SIZE * 0.8;
+                    this.position.x = (Math.random() - 0.5) * WORLD_SIZE * 0.7;
+                    this.position.z = (Math.random() - 0.5) * WORLD_SIZE * 0.7;
                     this.position.y = 2;
                     
                     validPosition = true;
                     for (let building of buildings) {
                         const dist = this.position.distanceTo(building.position);
-                        if (dist < 50) {
+                        if (dist < 60) {
                             validPosition = false;
                             break;
                         }
@@ -683,6 +727,9 @@
             player.mesh.isPlayer = true;
             player.mesh.player = player;
         }
+        
+        // Créer le pistolet dans la main
+        createGunInHand();
         
         // ===== CONTRÔLES =====
         const keys = {};
